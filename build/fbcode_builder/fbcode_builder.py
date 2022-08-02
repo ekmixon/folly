@@ -72,13 +72,13 @@ def _read_project_github_hashes():
         for filename in files:
             path = os.path.join(dirname, filename)
             with open(path) as f:
-                m_proj = re.match("^" + base_dir + "(.*)-rev\.txt$", path)
+                m_proj = re.match(f"^{base_dir}" + "(.*)-rev\.txt$", path)
                 if m_proj is None:
                     raise RuntimeError("Not a hash file? {0}".format(path))
                 m_hash = re.match("^Subproject commit ([0-9a-f]+)\n$", f.read())
                 if m_hash is None:
                     raise RuntimeError("No hash in {0}".format(path))
-                yield m_proj.group(1), m_hash.group(1)
+                yield (m_proj[1], m_hash[1])
 
 
 class FBCodeBuilder(object):
@@ -289,36 +289,40 @@ class FBCodeBuilder(object):
     def python_venv(self):
         actions = []
         if self.option("PYTHON_VENV", "OFF") == "ON":
-            actions.append(
-                ShellQuoted("source {p}").format(
-                    p=path_join(self.option("prefix"), "venv", "bin", "activate")
+            actions.extend(
+                (
+                    ShellQuoted("source {p}").format(
+                        p=path_join(
+                            self.option("prefix"), "venv", "bin", "activate"
+                        )
+                    ),
+                    self.run(
+                        ShellQuoted("python3 -m pip install {deps}").format(
+                            deps=shell_join(
+                                " ",
+                                (ShellQuoted(dep) for dep in self.python_deps()),
+                            )
+                        )
+                    ),
                 )
             )
 
-            actions.append(
-                self.run(
-                    ShellQuoted("python3 -m pip install {deps}").format(
-                        deps=shell_join(
-                            " ", (ShellQuoted(dep) for dep in self.python_deps())
-                        )
-                    )
-                )
-            )
         return actions
 
     def enable_rust_toolchain(self, toolchain="stable", is_bootstrap=True):
-        choices = set(["stable", "beta", "nightly"])
+        choices = {"stable", "beta", "nightly"}
 
-        assert toolchain in choices, (
-            "while enabling rust toolchain: {} is not in {}"
-        ).format(toolchain, choices)
+        assert (
+            toolchain in choices
+        ), f"while enabling rust toolchain: {toolchain} is not in {choices}"
+
 
         rust_toolchain_opt = (toolchain, is_bootstrap)
         prev_opt = self.option("rust_toolchain", rust_toolchain_opt)
-        assert prev_opt == rust_toolchain_opt, (
-            "while enabling rust toolchain: previous toolchain already set to"
-            " {}, but trying to set it to {} now"
-        ).format(prev_opt, rust_toolchain_opt)
+        assert (
+            prev_opt == rust_toolchain_opt
+        ), f"while enabling rust toolchain: previous toolchain already set to {prev_opt}, but trying to set it to {rust_toolchain_opt} now"
+
 
         self.add_option("rust_toolchain", rust_toolchain_opt)
 
@@ -375,29 +379,35 @@ class FBCodeBuilder(object):
         local_repo_dir = self.option("{0}:local_repo_dir".format(project), "")
         return self.step(
             "Check out {0}, workdir {1}".format(project, path),
-            [
-                self.workdir(self._github_dir),
-                self.run(
-                    ShellQuoted("git clone {opts} https://github.com/{p}").format(
-                        p=project,
-                        opts=ShellQuoted(
-                            self.option("{}:git_clone_opts".format(project), "")
+            (
+                [
+                    self.workdir(self._github_dir),
+                    self.copy_local_repo(local_repo_dir, os.path.basename(project))
+                    if local_repo_dir
+                    else self.run(
+                        ShellQuoted(
+                            "git clone {opts} https://github.com/{p}"
+                        ).format(
+                            p=project,
+                            opts=ShellQuoted(
+                                self.option(f"{project}:git_clone_opts", "")
+                            ),
+                        )
+                    ),
+                    self.workdir(
+                        path_join(
+                            self._github_dir, os.path.basename(project), path
                         ),
-                    )
-                )
-                if not local_repo_dir
-                else self.copy_local_repo(local_repo_dir, os.path.basename(project)),
-                self.workdir(
-                    path_join(self._github_dir, os.path.basename(project), path),
-                ),
-            ]
-            + maybe_change_branch,
+                    ),
+                ]
+                + maybe_change_branch
+            ),
         )
 
     def fb_github_project_workdir(self, project_and_path, github_org="facebook"):
         "This helper lets Facebook-internal CI special-cases FB projects"
         project, path = project_and_path.split("/", 1)
-        return self.github_project_workdir(github_org + "/" + project, path)
+        return self.github_project_workdir(f"{github_org}/{project}", path)
 
     def _make_vars(self, make_vars):
         return shell_join(
@@ -429,9 +439,7 @@ class FBCodeBuilder(object):
     def configure(self, name=None):
         autoconf_options = {}
         if name is not None:
-            autoconf_options.update(
-                self.option("{0}:autoconf_options".format(name), {})
-            )
+            autoconf_options |= self.option("{0}:autoconf_options".format(name), {})
         return [
             self.run(
                 ShellQuoted(
@@ -476,7 +484,7 @@ class FBCodeBuilder(object):
         if "BUILD_THRIFT_PY3" in os.environ and "fbthrift" in name:
             cmake_defines["thriftpy3"] = "ON"
 
-        cmake_defines.update(self.option("{0}:cmake_defines".format(name), {}))
+        cmake_defines |= self.option("{0}:cmake_defines".format(name), {})
         return [
             self.run(
                 ShellQuoted(

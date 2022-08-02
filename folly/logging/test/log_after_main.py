@@ -20,8 +20,7 @@ import unittest
 
 class LogAfterMain(unittest.TestCase):
     def find_helper(self, name, env_var):
-        path = os.environ.get(env_var)
-        if path:
+        if path := os.environ.get(env_var):
             if not os.access(path, os.X_OK):
                 raise Exception(
                     "path specified by $%s does not exist: %r" % (env_var, path)
@@ -55,7 +54,7 @@ class LogAfterMain(unittest.TestCase):
         proc = self.run_helper([helper])
         self.assertEqual(proc.stdout, "")
         self.assertIn("main running", proc.stderr)
-        self.assertEqual(proc.returncode, 0, "stderr: %s" % (proc.stderr,))
+        self.assertEqual(proc.returncode, 0, f"stderr: {proc.stderr}")
 
     def test_log_after_main_no_init(self):
         helper = self.find_helper(
@@ -63,4 +62,4 @@ class LogAfterMain(unittest.TestCase):
         )
         proc = self.run_helper([helper])
         self.assertEqual(proc.stdout, "")
-        self.assertEqual(proc.returncode, 0, "stderr: %s" % (proc.stderr,))
+        self.assertEqual(proc.returncode, 0, f"stderr: {proc.stderr}")

@@ -37,7 +37,7 @@ class FiberPrinter:
 
         state = self.val["state_"]
         d = gdb.types.make_enum_dict(state.type)
-        d = dict((v, k) for k, v in d.items())
+        d = {v: k for k, v in d.items()}
         self.state = d[int(state)]
 
     def state_to_string(self):
@@ -58,11 +58,11 @@ class FiberPrinter:
         return "Unknown"
 
     def backtrace_available(self):
-        return (
-            self.state != "folly::fibers::Fiber::INVALID"
-            and self.state != "folly::fibers::Fiber::NOT_STARTED"
-            and self.state != "folly::fibers::Fiber::RUNNING"
-        )
+        return self.state not in [
+            "folly::fibers::Fiber::INVALID",
+            "folly::fibers::Fiber::NOT_STARTED",
+            "folly::fibers::Fiber::RUNNING",
+        ]
 
     def to_string(self):
         return 'folly::fibers::Fiber(state="{state}", backtrace={bt})'.format(
@@ -185,9 +185,8 @@ class FiberUnwinder(gdb.unwinder.Unwinder):
     def set_fiber(cls, fiber):
         cls.init()
 
-        if not fiber:
-            if not cls.instance.fiber:
-                return "No active fiber."
+        if not fiber and not cls.instance.fiber:
+            return "No active fiber."
 
         # get the relevant fiber's info, new one if specified, old one if not
         info = FiberInfo(fiber or cls.instance.fiber)
@@ -301,10 +300,10 @@ def use_language(lang):
             if lang == orig:
                 return fn(*args, **kwds)
             try:
-                gdb.execute("set language " + lang)
+                gdb.execute(f"set language {lang}")
                 return fn(*args, **kwds)
             finally:
-                gdb.execute("set language " + orig)
+                gdb.execute(f"set language {orig}")
 
         return wrapped
 
@@ -337,7 +336,7 @@ class FiberCommand(gdb.Command):
         # look up fiber
         fiber_ptr = get_fiber(arg)
         if not fiber_ptr:
-            print("Invalid fiber id or address: " + arg)
+            print(f"Invalid fiber id or address: {arg}")
             return
 
         # activate
@@ -422,7 +421,7 @@ class FiberInfoCommand(gdb.Command):
         for (mid, fid), info in get_fiber_info(only, managers=True):
             # track that we've seen this fiber/manager
             if fid:
-                seen.add("{}.{}".format(mid, fid))
+                seen.add(f"{mid}.{fid}")
                 seen.add(str(mid))
 
             # If it's a manager, print the header and continue
@@ -453,9 +452,9 @@ class FiberInfoCommand(gdb.Command):
         for match in only or []:
             if match not in seen:
                 if "." in match:
-                    print("Invalid fiber id: " + match)
+                    print(f"Invalid fiber id: {match}")
                 else:
-                    print("Invalid fiber manager id: " + match)
+                    print(f"Invalid fiber manager id: {match}")
 
 
 class FiberApplyCommand(gdb.Command):
@@ -552,7 +551,7 @@ class ShowFiberCommand(gdb.Command):
         for name in sorted(self.REGISTRY):
             print(
                 "{name}: {value}".format(
-                    name=name, value=gdb.parameter("fiber " + name)
+                    name=name, value=gdb.parameter(f"fiber {name}")
                 )
             )
 
@@ -625,9 +624,7 @@ class FiberInfo(object):
 
     # Lookup of fiber address/name to (mid, fid)
     def __new__(cls, fiber):
-        # return cached info object if it exists
-        cached = cls.NAMES.get(str(fiber.address), None)
-        if cached:
+        if cached := cls.NAMES.get(str(fiber.address), None):
             return cached
 
         # otherwise create a new one
@@ -643,7 +640,7 @@ class FiberInfo(object):
 
     @property
     def id(self):
-        return "{}.{}".format(self.mid or "?", self.fid or "?")
+        return f'{self.mid or "?"}.{self.fid or "?"}'
 
     @property
     def name(self):
@@ -668,15 +665,13 @@ class FiberInfo(object):
         return cls.NAMES.get(name, None)
 
     def __repr__(self):
-        return 'FiberInfo(address={}, id={}, name="{}")'.format(
-            self.fiber.address, self.id, self.name
-        )
+        return f'FiberInfo(address={self.fiber.address}, id={self.id}, name="{self.name}")'
 
     def __str__(self):
         return "Fiber {address} ({state}){name}".format(
             address=self.fiber.address,
             state=FiberPrinter(self.fiber).state_to_string(),
-            name=' "{}"'.format(self._name) if self._name else "",
+            name=f' "{self._name}"' if self._name else "",
         )
 
     def __eq__(self, other):
@@ -693,9 +688,7 @@ def fiber_deactivate():
 
 def get_fiber(fid):
     """return a fiber for the given id, name, or address, or None"""
-    # check if it's a named fiber
-    info = FiberInfo.by_name(fid)
-    if info:
+    if info := FiberInfo.by_name(fid):
         return info.fiber
 
     # next check if it's an assigned id
@@ -737,15 +730,14 @@ def get_fiber_info(only=None, managers=False):
         # first check if pre-cached
         if mid in get_fiber_info.cache:
             for (fid, info) in get_fiber_info.cache[mid].items():
-                fiber_id = "{}.{}".format(mid, fid)
+                fiber_id = f"{mid}.{fid}"
                 if not only or str(mid) in only or fiber_id in only:
                     yield ((mid, fid), info)
             continue
 
         # list fibers from the manager
         fibers = collections.OrderedDict()
-        fid = 1
-        for fiber in fiber_manager_active_fibers(manager):
+        for fid, fiber in enumerate(fiber_manager_active_fibers(manager), start=1):
             # look up/create cached info
             info = FiberInfo(fiber)
             # associate mid.fid with info
@@ -753,10 +745,9 @@ def get_fiber_info(only=None, managers=False):
             info.fid = fid
             fibers[fid] = info
             # output only if matching the filter
-            fiber_id = "{}.{}".format(mid, fid)
+            fiber_id = f"{mid}.{fid}"
             if not only or str(mid) in only or fiber_id in only:
                 yield ((mid, fid), info)
-            fid += 1
         get_fiber_info.cache[mid] = fibers
 
 
@@ -905,7 +896,7 @@ def get_fiber_manager_map_vevb():
 # reset the caches when we continue; the current fibers will almost certainly change
 def clear_fiber_caches(*args):
     # default to only clearing manager and info caches
-    caches = set(arg.string() for arg in args) or {"managers", "info"}
+    caches = {arg.string() for arg in args} or {"managers", "info"}
     cleared = set()
     if "managers" in caches:
         cleared.add("manager")
@@ -919,9 +910,8 @@ def clear_fiber_caches(*args):
         cleared.add("names")
         FiberInfo.NAMES.clear()
 
-    result = "Cleared {}.".format(", ".join(cleared))
-    unknown = caches - cleared
-    if unknown:
+    result = f'Cleared {", ".join(cleared)}.'
+    if unknown := caches - cleared:
         # print a warning if we asked for any unknown caches to clear
         result += " Skipped unknown " + ", ".join(unknown)
     return result

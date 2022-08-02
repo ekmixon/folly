@@ -39,8 +39,7 @@ class DiGraph(object):
     def edges(self):
         edges = []
         for node, neighbors in self.adjacency_map.items():
-            for neighbor in neighbors:
-                edges.append((node, neighbor))
+            edges.extend((node, neighbor) for neighbor in neighbors)
         return edges
 
     def nodes(self):
@@ -152,7 +151,7 @@ def strongly_connected_components(G):  # noqa: C901
                         scc_queue.append(v)
 
 
-def simple_cycles(G):  # noqa: C901
+def simple_cycles(G):    # noqa: C901
     """
     Adapted from networkx: http://networkx.github.io/
     Parameters
@@ -166,7 +165,7 @@ def simple_cycles(G):  # noqa: C901
     """
 
     def _unblock(thisnode, blocked, B):
-        stack = set([thisnode])
+        stack = {thisnode}
         while stack:
             node = stack.pop()
             if node in blocked:
@@ -229,18 +228,16 @@ def find_cycle(graph):
         [(a1,a2), (a2,a3), ... (an-1,an), (an, a1)]
     Otherwise returns an empty list.
     """
-    cycles = list(simple_cycles(graph))
-    if cycles:
-        nodes = cycles[0]
-        nodes.append(nodes[0])
-        edges = []
-        prev = nodes[0]
-        for node in nodes[1:]:
-            edges.append((prev, node))
-            prev = node
-        return edges
-    else:
+    if not (cycles := list(simple_cycles(graph))):
         return []
+    nodes = cycles[0]
+    nodes.append(nodes[0])
+    edges = []
+    prev = nodes[0]
+    for node in nodes[1:]:
+        edges.append((prev, node))
+        prev = node
+    return edges
 
 
 def get_stacktrace(thread_id):
@@ -249,8 +246,7 @@ def get_stacktrace(thread_id):
     """
     gdb.execute("thread %d" % thread_id, from_tty=False, to_string=True)
     output = gdb.execute("bt", from_tty=False, to_string=True)
-    stacktrace_lines = output.strip().split("\n")
-    return stacktrace_lines
+    return output.strip().split("\n")
 
 
 def is_thread_blocked_with_frame(
@@ -351,11 +347,10 @@ def get_thread_info():
     regex = re.compile(r"[\s\*]*(\d+).*Thread.*\(LWP (\d+)\).*")
     for line in lines:
         try:
-            thread_id = int(regex.match(line).group(1))
-            thread_lwp = int(regex.match(line).group(2))
+            thread_id = int(regex.match(line)[1])
+            thread_lwp = int(regex.match(line)[2])
             lwp_to_thread_id[thread_lwp] = thread_id
-            mutex_type = MutexType.get_mutex_type(thread_id, line)
-            if mutex_type:
+            if mutex_type := MutexType.get_mutex_type(thread_id, line):
                 blocked_threads[thread_lwp] = mutex_type
         except Exception:
             continue
@@ -451,9 +446,7 @@ class Deadlock(gdb.Command):
                     mutex_type=mutex_type,
                 )
 
-        # A deadlock exists if there is a cycle in the graph.
-        cycle = find_cycle(graph)
-        if cycle:
+        if cycle := find_cycle(graph):
             print("Found deadlock!")
             print_cycle(graph, lwp_to_thread_id, cycle)
         else:

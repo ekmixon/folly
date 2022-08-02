@@ -88,7 +88,7 @@ def find_project_root():
 
 def persistent_temp_dir(repo_root):
     escaped = repo_root.replace("/", "sZs").replace("\\", "sZs").replace(":", "")
-    return os.path.join(os.path.expandvars("$HOME"), ".fbcode_builder-" + escaped)
+    return os.path.join(os.path.expandvars("$HOME"), f".fbcode_builder-{escaped}")
 
 
 if __name__ == "__main__":

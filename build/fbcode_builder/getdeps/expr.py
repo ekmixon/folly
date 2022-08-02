@@ -59,7 +59,7 @@ class NotExpr(ExprNode):
         return not self._node.eval(ctx)
 
     def __str__(self):
-        return "not(%s)" % self._node
+        return f"not({self._node})"
 
 
 class AllExpr(ExprNode):
@@ -67,16 +67,11 @@ class AllExpr(ExprNode):
         self._nodes = nodes
 
     def eval(self, ctx):
-        for node in self._nodes:
-            if not node.eval(ctx):
-                return False
-        return True
+        return all(node.eval(ctx) for node in self._nodes)
 
     def __str__(self):
-        items = []
-        for node in self._nodes:
-            items.append(str(node))
-        return "all(%s)" % ",".join(items)
+        items = [str(node) for node in self._nodes]
+        return f'all({",".join(items)})'
 
 
 class AnyExpr(ExprNode):
@@ -84,16 +79,11 @@ class AnyExpr(ExprNode):
         self._nodes = nodes
 
     def eval(self, ctx):
-        for node in self._nodes:
-            if node.eval(ctx):
-                return True
-        return False
+        return any(node.eval(ctx) for node in self._nodes)
 
     def __str__(self):
-        items = []
-        for node in self._nodes:
-            items.append(str(node))
-        return "any(%s)" % ",".join(items)
+        items = [str(node) for node in self._nodes]
+        return f'any({",".join(items)})'
 
 
 class EqualExpr(ExprNode):
@@ -105,7 +95,7 @@ class EqualExpr(ExprNode):
         return ctx.get(self._key) == self._value
 
     def __str__(self):
-        return "%s=%s" % (self._key, self._value)
+        return f"{self._key}={self._value}"
 
 
 class Parser(object):
@@ -118,9 +108,7 @@ class Parser(object):
         expr = self.top()
         garbage = self.lex.get_token()
         if garbage != "":
-            raise Exception(
-                "Unexpected token %s after EqualExpr in %s" % (garbage, self.text)
-            )
+            raise Exception(f"Unexpected token {garbage} after EqualExpr in {self.text}")
         return expr
 
     def top(self):
@@ -133,11 +121,11 @@ class Parser(object):
                 "any": self.parse_any,
                 "all": self.parse_all,
             }
-            func = parsers.get(name)
-            if not func:
-                raise Exception("invalid term %s in %s" % (name, self.text))
-            return func()
+            if func := parsers.get(name):
+                return func()
 
+            else:
+                raise Exception(f"invalid term {name} in {self.text}")
         if op == "=":
             if name not in self.valid_variables:
                 raise Exception("unknown variable %r in expression" % (name,))
@@ -150,7 +138,7 @@ class Parser(object):
     def ident(self):
         ident = self.lex.get_token()
         if not re.match("[a-zA-Z]+", ident):
-            raise Exception("expected identifier found %s" % ident)
+            raise Exception(f"expected identifier found {ident}")
         return ident
 
     def parse_not(self):

@@ -46,10 +46,7 @@ class DepBase(object):
     # final_install_prefix='/usr/local'.
     # If left unspecified, destdir will be used.
     def process_deps(self, destdir, final_install_prefix=None):
-        if self.buildopts.is_windows():
-            lib_dir = "bin"
-        else:
-            lib_dir = "lib"
+        lib_dir = "bin" if self.buildopts.is_windows() else "lib"
         self.munged_lib_dir = os.path.join(destdir, lib_dir)
 
         final_lib_dir = os.path.join(final_install_prefix or destdir, lib_dir)
@@ -60,7 +57,7 @@ class DepBase(object):
         # Look only at the things that got installed in the leaf package,
         # which will be the last entry in the install dirs list
         inst_dir = self.install_dirs[-1]
-        print("Process deps under %s" % inst_dir, file=sys.stderr)
+        print(f"Process deps under {inst_dir}", file=sys.stderr)
 
         for dir in OBJECT_SUBDIRS:
             src_dir = os.path.join(inst_dir, dir)
@@ -71,7 +68,7 @@ class DepBase(object):
                 os.makedirs(dest_dir)
 
             for objfile in self.list_objs_in_dir(src_dir):
-                print("Consider %s/%s" % (dir, objfile))
+                print(f"Consider {dir}/{objfile}")
                 dest_obj = os.path.join(dest_dir, objfile)
                 copyfile(os.path.join(src_dir, objfile), dest_obj)
                 self.munge_in_place(dest_obj, final_lib_dir)
@@ -87,14 +84,13 @@ class DepBase(object):
         interesting_deps = {d for d in all_deps if self.interesting_dep(d)}
         dep_paths = []
         for dep in interesting_deps:
-            dep_path = self.resolve_loader_path(dep)
-            if dep_path:
+            if dep_path := self.resolve_loader_path(dep):
                 dep_paths.append(dep_path)
 
         return dep_paths
 
     def munge_in_place(self, objfile, final_lib_dir):
-        print("Munging %s" % objfile)
+        print(f"Munging {objfile}")
         for d in self.list_dynamic_deps(objfile):
             if not self.interesting_dep(d):
                 continue
@@ -102,7 +98,7 @@ class DepBase(object):
             # Resolve this dep: does it exist in any of our installation
             # directories?  If so, then it is a candidate for processing
             dep = self.resolve_loader_path(d)
-            print("dep: %s -> %s" % (d, dep))
+            print(f"dep: {d} -> {dep}")
             if dep:
                 dest_dep = os.path.join(self.munged_lib_dir, os.path.basename(dep))
                 if dep not in self.processed_deps:
@@ -139,10 +135,9 @@ class DepBase(object):
                     yield os.path.normcase(relative_result)
             elif recurse and stat.S_ISDIR(st.st_mode):
                 child_prefix = os.path.join(output_prefix, entry)
-                for result in self.list_objs_in_dir(
+                yield from self.list_objs_in_dir(
                     entry_path, recurse=recurse, output_prefix=child_prefix
-                ):
-                    yield result
+                )
 
     def is_objfile(self, objfile):
         return True
@@ -184,16 +179,15 @@ class WinDeps(DepBase):
 
     def list_dynamic_deps(self, exe):
         deps = []
-        print("Resolve deps for %s" % exe)
+        print(f"Resolve deps for {exe}")
         output = subprocess.check_output(
             [self.dumpbin, "/nologo", "/dependents", exe]
         ).decode("utf-8")
 
         lines = output.split("\n")
         for line in lines:
-            m = re.match("\\s+(\\S+.dll)", line, re.IGNORECASE)
-            if m:
-                deps.append(m.group(1).lower())
+            if m := re.match("\\s+(\\S+.dll)", line, re.IGNORECASE):
+                deps.append(m[1].lower())
 
         return deps
 
@@ -219,18 +213,14 @@ class WinDeps(DepBase):
     )
 
     def interesting_dep(self, d):
-        if "api-ms-win-crt" in d:
-            return False
-        if d in self.SYSTEM_DLLS:
-            return False
-        return True
+        return False if "api-ms-win-crt" in d else d not in self.SYSTEM_DLLS
 
     def is_objfile(self, objfile):
-        if not os.path.isfile(objfile):
-            return False
-        if objfile.lower().endswith(".exe"):
-            return True
-        return False
+        return (
+            bool(objfile.lower().endswith(".exe"))
+            if os.path.isfile(objfile)
+            else False
+        )
 
     def emit_dev_run_script(self, script_path, dep_dirs):
         """Emit a script that can be used to run build artifacts directly from the
@@ -256,10 +246,9 @@ class WinDeps(DepBase):
         The compute_dependency_paths_fast() is a alternative function that runs faster
         but may return additional extraneous paths.
         """
-        dep_dirs = set()
-        # Find paths by scanning the binaries.
-        for dep in self.find_all_dependencies(build_dir):
-            dep_dirs.add(os.path.dirname(dep))
+        dep_dirs = {
+            os.path.dirname(dep) for dep in self.find_all_dependencies(build_dir)
+        }
 
         dep_dirs.update(self.read_custom_dep_dirs(build_dir))
         return sorted(dep_dirs)
@@ -340,8 +329,7 @@ class ElfDeps(DepBase):
             .decode("utf-8")
             .strip()
         )
-        lines = out.split("\n")
-        return lines
+        return out.split("\n")
 
     def rewrite_dep(self, objfile, depname, old_dep, new_dep, final_lib_dir):
         final_dep = os.path.join(
@@ -369,9 +357,7 @@ MACH_MAGIC = 0xFEEDFACF
 
 class MachDeps(DepBase):
     def interesting_dep(self, d):
-        if d.startswith("/usr/lib/") or d.startswith("/System/"):
-            return False
-        return True
+        return not d.startswith("/usr/lib/") and not d.startswith("/System/")
 
     def is_objfile(self, objfile):
         if not os.path.isfile(objfile):
@@ -398,10 +384,9 @@ class MachDeps(DepBase):
         lines = out.split("\n")
         deps = []
         for line in lines:
-            m = re.match("\t(\\S+)\\s", line)
-            if m:
-                if os.path.basename(m.group(1)) != os.path.basename(objfile):
-                    deps.append(os.path.normcase(m.group(1)))
+            if m := re.match("\t(\\S+)\\s", line):
+                if os.path.basename(m[1]) != os.path.basename(objfile):
+                    deps.append(os.path.normcase(m[1]))
         return deps
 
     def rewrite_dep(self, objfile, depname, old_dep, new_dep, final_lib_dir):

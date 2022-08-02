@@ -110,8 +110,8 @@ class PythonWheelBuilder(BuilderBase):
         # future if we ever wanted to, say if we wanted to call pip here.)
         wheel_name = self._parse_wheel_name()
         name_version_prefix = "-".join((wheel_name.distribution, wheel_name.version))
-        dist_info_name = name_version_prefix + ".dist-info"
-        data_dir_name = name_version_prefix + ".data"
+        dist_info_name = f"{name_version_prefix}.dist-info"
+        data_dir_name = f"{name_version_prefix}.data"
         self.dist_info_dir = os.path.join(self.src_dir, dist_info_name)
         wheel_metadata = self._read_wheel_metadata(wheel_name)
 
@@ -121,7 +121,7 @@ class PythonWheelBuilder(BuilderBase):
         # into site-packages.
         version = wheel_metadata["Wheel-Version"]
         if not version.startswith("1."):
-            raise Exception("unsupported wheel version %s" % (version,))
+            raise Exception(f"unsupported wheel version {version}")
 
         # Add a find_dependency() call for each of our dependencies.
         # The dependencies are also listed in the wheel METADATA file, but it is simpler
@@ -129,7 +129,7 @@ class PythonWheelBuilder(BuilderBase):
         dep_list = sorted(
             self.manifest.get_section_as_dict("dependencies", self.ctx).keys()
         )
-        find_dependency_lines = ["find_dependency({})".format(dep) for dep in dep_list]
+        find_dependency_lines = [f"find_dependency({dep})" for dep in dep_list]
 
         getdeps_cmake_dir = os.path.join(
             os.path.dirname(os.path.dirname(__file__)), "CMake"
@@ -160,9 +160,9 @@ class PythonWheelBuilder(BuilderBase):
             # on some simple pure Python wheels, so I haven't tested against wheels with
             # additional files in the .data directory.
             raise Exception(
-                "handling of the subdirectories inside %s is not implemented yet"
-                % data_dir_name
+                f"handling of the subdirectories inside {data_dir_name} is not implemented yet"
             )
+
 
         # Emit CMake files
         self._write_cmakelists(path_mapping, dep_list)
@@ -217,7 +217,7 @@ class PythonWheelBuilder(BuilderBase):
             f.write(CMAKE_FOOTER.format(**self.template_format_dict))
 
     def _write_cmake_config_template(self):
-        config_path_name = self.manifest.name + "-config.cmake.in"
+        config_path_name = f"{self.manifest.name}-config.cmake.in"
         output_path = os.path.join(self.build_dir, config_path_name)
 
         with open(output_path, "w") as f:
@@ -243,12 +243,12 @@ class PythonWheelBuilder(BuilderBase):
 
         # The ArchiveFetcher prepends "manifest_name-", so strip that off first.
         wheel_name = os.path.basename(self.src_dir)
-        prefix = self.manifest.name + "-"
+        prefix = f"{self.manifest.name}-"
         if not wheel_name.startswith(prefix):
             raise Exception(
-                "expected wheel source directory to be of the form %s-NAME.whl"
-                % (prefix,)
+                f"expected wheel source directory to be of the form {prefix}-NAME.whl"
             )
+
         wheel_name = wheel_name[len(prefix) :]
 
         wheel_name_re = re.compile(
@@ -260,21 +260,21 @@ class PythonWheelBuilder(BuilderBase):
             r"-(?P<platform>\w+(\.\w+)*)"
             r"\.whl"
         )
-        match = wheel_name_re.match(wheel_name)
-        if not match:
+        if match := wheel_name_re.match(wheel_name):
+            return WheelNameInfo(
+                distribution=match["distribution"],
+                version=match["version"],
+                build=match["build"],
+                python=match["python"],
+                abi=match["abi"],
+                platform=match["platform"],
+            )
+
+        else:
             raise Exception(
                 "bad python wheel name %s: expected to have the form "
                 "DISTRIBUTION-VERSION-[-BUILD]-PYTAG-ABI-PLATFORM"
             )
-
-        return WheelNameInfo(
-            distribution=match.group("distribution"),
-            version=match.group("version"),
-            build=match.group("build"),
-            python=match.group("python"),
-            abi=match.group("abi"),
-            platform=match.group("platform"),
-        )
 
     def _read_wheel_metadata(self, wheel_name):
         metadata_path = os.path.join(self.dist_info_dir, "WHEEL")

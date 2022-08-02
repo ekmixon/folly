@@ -31,10 +31,7 @@ def get_linux_type():
             continue
         key = parts[0].strip()
         value_parts = shlex.split(parts[1].strip())
-        if not value_parts:
-            value = ""
-        else:
-            value = value_parts[0]
+        value = value_parts[0] if value_parts else ""
         os_vars[key] = value
 
     name = os_vars.get("NAME")
@@ -72,10 +69,7 @@ class HostType(object):
         # The OS/distro version if known
         self.distrovers = distrovers
         machine = platform.machine().lower()
-        if "arm" in machine or "aarch" in machine:
-            self.isarm = True
-        else:
-            self.isarm = False
+        self.isarm = "arm" in machine or "aarch" in machine
 
     def is_windows(self):
         return self.ostype == "windows"
@@ -90,20 +84,14 @@ class HostType(object):
         return self.ostype == "linux"
 
     def as_tuple_string(self):
-        return "%s-%s-%s" % (
-            self.ostype,
-            self.distro or "none",
-            self.distrovers or "none",
-        )
+        return f'{self.ostype}-{self.distro or "none"}-{self.distrovers or "none"}'
 
     def get_package_manager(self):
         if not self.is_linux():
             return None
         if self.distro in ("fedora", "centos", "centos_stream"):
             return "rpm"
-        if self.distro.startswith(("debian", "ubuntu")):
-            return "deb"
-        return None
+        return "deb" if self.distro.startswith(("debian", "ubuntu")) else None
 
     @staticmethod
     def from_tuple_string(s):

@@ -90,11 +90,7 @@ class BuildOptions(object):
 
         # If we are running from an fbsource repository, set self.fbsource_dir
         # to allow the ShipIt-based fetchers to use it.
-        if self.repo_project == "fbsource":
-            self.fbsource_dir = self.repo_root
-        else:
-            self.fbsource_dir = None
-
+        self.fbsource_dir = self.repo_root if self.repo_project == "fbsource" else None
         self.num_jobs = num_jobs
         self.scratch_dir = scratch_dir
         self.install_dir = install_dir
@@ -187,11 +183,7 @@ class BuildOptions(object):
         )
 
     def compute_env_for_install_dirs(self, install_dirs, env=None, manifest=None):
-        if env is not None:
-            env = env.copy()
-        else:
-            env = Env()
-
+        env = env.copy() if env is not None else Env()
         env["GETDEPS_BUILD_DIR"] = os.path.join(self.scratch_dir, "build")
         env["GETDEPS_INSTALL_DIR"] = self.install_dir
 
@@ -283,10 +275,10 @@ class BuildOptions(object):
                 # And let openssl know to pick up the system certs if present
                 for system_ssl_cfg in ["/etc/pki/tls", "/etc/ssl"]:
                     if os.path.isdir(system_ssl_cfg):
-                        cert_dir = system_ssl_cfg + "/certs"
+                        cert_dir = f"{system_ssl_cfg}/certs"
                         if os.path.isdir(cert_dir):
                             env["SSL_CERT_DIR"] = cert_dir
-                        cert_file = system_ssl_cfg + "/cert.pem"
+                        cert_file = f"{system_ssl_cfg}/cert.pem"
                         if os.path.isfile(cert_file):
                             env["SSL_CERT_FILE"] = cert_file
 
@@ -315,10 +307,14 @@ def find_existing_win32_subst_for_path(
 ):
     # type: (...) -> typing.Optional[str]
     path = ntpath.normcase(ntpath.normpath(path))
-    for letter, target in subst_mapping.items():
-        if ntpath.normcase(target) == path:
-            return letter
-    return None
+    return next(
+        (
+            letter
+            for letter, target in subst_mapping.items()
+            if ntpath.normcase(target) == path
+        ),
+        None,
+    )
 
 
 def find_unused_drive_letter():
@@ -334,20 +330,16 @@ def find_unused_drive_letter():
     nul = "\x00".encode("ascii")
 
     used = [drive.decode("ascii")[0] for drive in bufs.raw.strip(nul).split(nul)]
-    possible = [c for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"]
+    possible = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
     available = sorted(list(set(possible) - set(used)))
-    if len(available) == 0:
-        return None
-    # Prefer to assign later letters rather than earlier letters
-    return available[-1]
+    return None if len(available) == 0 else available[-1]
 
 
 def create_subst_path(path):
-    for _attempt in range(0, 24):
-        drive = find_existing_win32_subst_for_path(
+    for _attempt in range(24):
+        if drive := find_existing_win32_subst_for_path(
             path, subst_mapping=list_win32_subst_letters()
-        )
-        if drive:
+        ):
             return drive
         available = find_unused_drive_letter()
         if available is None:
@@ -362,18 +354,17 @@ def create_subst_path(path):
         # Try to set up a subst mapping; note that we may be racing with
         # other processes on the same host, so this may not succeed.
         try:
-            subprocess.check_call(["subst", "%s:" % available, path])
+            subprocess.check_call(["subst", f"{available}:", path])
             return "%s:\\" % available
         except Exception:
-            print("Failed to map %s -> %s" % (available, path))
+            print(f"Failed to map {available} -> {path}")
 
-    raise Exception("failed to set up a subst path for %s" % path)
+    raise Exception(f"failed to set up a subst path for {path}")
 
 
 def _check_host_type(args, host_type):
     if host_type is None:
-        host_tuple_string = getattr(args, "host_type", None)
-        if host_tuple_string:
+        if host_tuple_string := getattr(args, "host_type", None):
             host_type = HostType.from_tuple_string(host_tuple_string)
         else:
             host_type = HostType()
@@ -420,12 +411,13 @@ def setup_build_options(args, host_type=None):
                 for s in ["/", "\\", ":"]:
                     munged = munged.replace(s, "Z")
 
-                if is_windows() and os.path.isdir("c:/open"):
-                    temp = "c:/open/scratch"
-                else:
-                    temp = tempfile.gettempdir()
+                temp = (
+                    "c:/open/scratch"
+                    if is_windows() and os.path.isdir("c:/open")
+                    else tempfile.gettempdir()
+                )
 
-                scratch_dir = os.path.join(temp, "fbcode_builder_getdeps-%s" % munged)
+                scratch_dir = os.path.join(temp, f"fbcode_builder_getdeps-{munged}")
                 if not is_windows() and os.geteuid() == 0:
                     # Running as root; in the case where someone runs
                     # sudo getdeps.py install-system-deps
@@ -439,13 +431,10 @@ def setup_build_options(args, host_type=None):
 
         if is_windows():
             subst = create_subst_path(scratch_dir)
-            print(
-                "Mapping scratch dir %s -> %s" % (scratch_dir, subst), file=sys.stderr
-            )
+            print(f"Mapping scratch dir {scratch_dir} -> {subst}", file=sys.stderr)
             scratch_dir = subst
-    else:
-        if not os.path.exists(scratch_dir):
-            os.makedirs(scratch_dir)
+    elif not os.path.exists(scratch_dir):
+        os.makedirs(scratch_dir)
 
     # Make sure we normalize the scratch path.  This path is used as part of the hash
     # computation for detecting if projects have been updated, so we need to always

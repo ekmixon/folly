@@ -69,16 +69,16 @@ class ResourceLoader(Loader):
         while dirs:
             current = dirs.pop(0)
             for name in pkg_resources.resource_listdir(self.namespace, current):
-                path = "%s/%s" % (current, name)
+                path = f"{current}/{name}"
 
                 if pkg_resources.resource_isdir(self.namespace, path):
                     dirs.append(path)
                 else:
-                    yield "%s/%s" % (current, name)
+                    yield f"{current}/{name}"
 
     def _find_manifest(self, project_name):
         for name in self._list_manifests():
-            if name.endswith("/%s" % project_name):
+            if name.endswith(f"/{project_name}"):
                 return name
 
         raise ManifestNotFound(project_name)
@@ -181,7 +181,7 @@ class ManifestLoader(object):
         # The list of manifests in dependency order
         dep_order = []
 
-        while len(deps) > 0:
+        while deps:
             m = deps.pop(0)
             if m.name in seen:
                 continue
@@ -268,13 +268,15 @@ class ManifestLoader(object):
 
         hasher = hashlib.sha256()
         # Some environmental and configuration things matter
-        env = {}
-        env["install_dir"] = self.build_opts.install_dir
-        env["scratch_dir"] = self.build_opts.scratch_dir
-        env["vcvars_path"] = self.build_opts.vcvars_path
-        env["os"] = self.build_opts.host_type.ostype
-        env["distro"] = self.build_opts.host_type.distro
-        env["distro_vers"] = self.build_opts.host_type.distrovers
+        env = {
+            "install_dir": self.build_opts.install_dir,
+            "scratch_dir": self.build_opts.scratch_dir,
+            "vcvars_path": self.build_opts.vcvars_path,
+            "os": self.build_opts.host_type.ostype,
+            "distro": self.build_opts.host_type.distro,
+            "distro_vers": self.build_opts.host_type.distrovers,
+        }
+
         for name in [
             "CXXFLAGS",
             "CPPFLAGS",
@@ -285,7 +287,7 @@ class ManifestLoader(object):
         ]:
             env[name] = os.environ.get(name)
         for tool in ["cc", "c++", "gcc", "g++", "clang", "clang++"]:
-            env["tool-%s" % tool] = path_search(os.environ, tool)
+            env[f"tool-{tool}"] = path_search(os.environ, tool)
         for name in manifest.get_section_as_args("depends.environment", ctx):
             env[name] = os.environ.get(name)
 
@@ -323,21 +325,18 @@ class ManifestLoader(object):
     def _get_project_dir_name(self, manifest):
         if manifest.is_first_party_project():
             return manifest.name
-        else:
-            project_hash = self.get_project_hash(manifest)
-            return "%s-%s" % (manifest.name, project_hash)
+        project_hash = self.get_project_hash(manifest)
+        return f"{manifest.name}-{project_hash}"
 
     def get_project_install_dir(self, manifest):
-        override = self._install_dir_overrides.get(manifest.name)
-        if override:
+        if override := self._install_dir_overrides.get(manifest.name):
             return override
 
         project_dir_name = self._get_project_dir_name(manifest)
         return os.path.join(self.build_opts.install_dir, project_dir_name)
 
     def get_project_build_dir(self, manifest):
-        override = self._build_dir_overrides.get(manifest.name)
-        if override:
+        if override := self._build_dir_overrides.get(manifest.name):
             return override
 
         project_dir_name = self._get_project_dir_name(manifest)
@@ -348,7 +347,6 @@ class ManifestLoader(object):
 
     def get_project_install_dir_respecting_install_prefix(self, manifest):
         inst_dir = self.get_project_install_dir(manifest)
-        prefix = self.get_project_install_prefix(manifest)
-        if prefix:
+        if prefix := self.get_project_install_prefix(manifest):
             return inst_dir + prefix
         return inst_dir

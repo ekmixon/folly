@@ -23,8 +23,7 @@ import unittest
 
 class FatalTests(unittest.TestCase):
     def setUp(self):
-        fatal_helper_env = os.environ.get("FOLLY_FATAL_HELPER")
-        if fatal_helper_env:
+        if fatal_helper_env := os.environ.get("FOLLY_FATAL_HELPER"):
             self.helper = fatal_helper_env
         else:
             build_dir = os.path.join(os.getcwd(), "buck-out", "gen")
@@ -52,8 +51,7 @@ class FatalTests(unittest.TestCase):
         if kwargs:
             raise TypeError("unexpected keyword arguments: %r" % (list(kwargs.keys())))
 
-        cmd = [self.helper]
-        cmd.extend(args)
+        cmd = [self.helper, *args]
         p = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env
         )
@@ -69,7 +67,7 @@ class FatalTests(unittest.TestCase):
         elif out.strip() == b"DEBUG=0":
             return False
         else:
-            self.fail("unexpected output from --check_debug: {}".format(out))
+            self.fail(f"unexpected output from --check_debug: {out}")
 
     def get_crash_regex(self, msg=b"test program crashing!", glog=True):
         if glog:
@@ -89,12 +87,12 @@ class FatalTests(unittest.TestCase):
 
     def test_async(self):
         handler_setings = "default=stream:stream=stderr,async=true"
-        err = self.run_helper("--logging=;" + handler_setings)
+        err = self.run_helper(f"--logging=;{handler_setings}")
         self.assertRegex(err, self.get_crash_regex())
 
     def test_immediate(self):
         handler_setings = "default=stream:stream=stderr,async=false"
-        err = self.run_helper("--logging=;" + handler_setings)
+        err = self.run_helper(f"--logging=;{handler_setings}")
         self.assertRegex(err, self.get_crash_regex())
 
     def test_none(self):
@@ -229,15 +227,10 @@ class FatalTests(unittest.TestCase):
     def _test_xcheck_cmp(
         self, flag, value, op, extra_msg=" extra user args", expect_failure=True
     ):
-        args = ["--crash=no", "--" + flag, str(value)]
+        args = ["--crash=no", f"--{flag}", str(value)]
         if expect_failure:
             err = self.run_helper(*args)
-            expected_msg = "Check failed: FLAGS_%s %s 0 (%s vs. 0)%s" % (
-                flag,
-                op,
-                value,
-                extra_msg,
-            )
+            expected_msg = f"Check failed: FLAGS_{flag} {op} 0 ({value} vs. 0){extra_msg}"
             self.assertRegex(err, self.get_crash_regex(expected_msg.encode("utf-8")))
         else:
             returncode, out, err = self.run_helper_nochecks(*args)

@@ -157,14 +157,14 @@ class IPAddressPrinter:
         result = ""
         if self.val["family_"] == socket.AF_INET:
             addr = self.val["addr_"]["ipV4Addr"]["addr_"]["bytes_"]["_M_elems"]
-            for i in range(0, 4):
+            for i in range(4):
                 result += "{:d}.".format(int(addr[i]))
         elif self.val["family_"] == socket.AF_INET6:
             addr = self.val["addr_"]["ipV6Addr"]["addr_"]["bytes_"]["_M_elems"]
-            for i in range(0, 8):
+            for i in range(8):
                 result += "{:02x}{:02x}:".format(int(addr[2 * i]), int(addr[2 * i + 1]))
         else:
-            return "unknown address family {}".format(self.val["family_"])
+            return f'unknown address family {self.val["family_"]}'
         return result[:-1]
 
     def display_hint(self):
@@ -181,13 +181,14 @@ class SocketAddressPrinter:
         result = ""
         if self.val["external_"] != 0:
             return "unix address, printer TBD"
-        else:
-            ipPrinter = IPAddressPrinter(self.val["storage_"]["addr"])
-            if self.val["storage_"]["addr"]["family_"] == socket.AF_INET6:
-                result += "[" + ipPrinter.to_string() + "]"
-            else:
-                result += ipPrinter.to_string()
-            result += ":{}".format(self.val["port_"])
+        ipPrinter = IPAddressPrinter(self.val["storage_"]["addr"])
+        result += (
+            f"[{ipPrinter.to_string()}]"
+            if self.val["storage_"]["addr"]["family_"] == socket.AF_INET6
+            else ipPrinter.to_string()
+        )
+
+        result += f':{self.val["port_"]}'
         return result
 
     def display_hint(self):
@@ -197,7 +198,7 @@ class SocketAddressPrinter:
 # For Node and Value containers, i.e., kEnableItemIteration == false
 class F14HashtableIterator:
     def __init__(self, ht, is_node_container):
-        item_type = gdb.lookup_type("{}::{}".format(ht.type.name, "Item"))
+        item_type = gdb.lookup_type(f"{ht.type.name}::Item")
         self.item_ptr_type = item_type.pointer()
         self.chunk_ptr = ht["chunks_"]
         # chunk_count is always power of 2;
@@ -237,7 +238,6 @@ class F14HashtableIterator:
                 if self.chunk_ptr == self.chunk_end:
                     raise StopIteration
                 self.current_chunk = self.chunk_iter(self.chunk_ptr)
-                pass
 
 
 # For Vector containers, i.e., kEnableItemIteration == true
@@ -266,9 +266,7 @@ class F14Printer:
         name = type.unqualified().strip_typedefs().name
         # strip template arguments
         template_start = name.find("<")
-        if template_start < 0:
-            return name
-        return name[:template_start]
+        return name if template_start < 0 else name[:template_start]
 
     def __init__(self, val):
         self.val = val
@@ -305,8 +303,7 @@ class F14Printer:
     @staticmethod
     def flatten(list):
         for elt in list:
-            for i in elt:
-                yield i
+            yield from elt
 
     def children(self):
         counter = map(self.format_count, itertools.count())
@@ -388,7 +385,7 @@ class ConcurrentHashMapPrinter:
         "Returns an iterator of tuple(name, value)"
         return (
             (f'[{str(item["kv_"]["first"])}]', item["kv_"]["second"])
-            for idx, item in enumerate(ConcurrentHashMapIterator(self.val))
+            for item in ConcurrentHashMapIterator(self.val)
         )
 
     def display_hint(self):

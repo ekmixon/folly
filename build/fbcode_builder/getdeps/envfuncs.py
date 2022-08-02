@@ -56,9 +56,7 @@ class Env(object):
 
     def get(self, key, defval=None):
         key = self._key(key)
-        if key is None:
-            return defval
-        return self._dict[key]
+        return defval if key is None else self._dict[key]
 
     def __getitem__(self, key):
         val = self.get(key)
@@ -70,8 +68,7 @@ class Env(object):
         if key is None:
             raise KeyError("attempting to unset env[None]")
 
-        key = self._key(key)
-        if key:
+        if key := self._key(key):
             del self._dict[key]
 
     def __delitem__(self, key):
@@ -85,7 +82,7 @@ class Env(object):
             raise KeyError("attempting to assign env[None] = %r" % value)
 
         if value is None:
-            raise ValueError("attempting to assign env[%s] = None" % key)
+            raise ValueError(f"attempting to assign env[{key}] = None")
 
         # The `str` conversion is important to avoid triggering errors
         # with subprocess if we pass in a unicode value; see commentary
@@ -126,10 +123,7 @@ def add_path_entry(env, name, item, append=True, separator=os.pathsep):
     the item is added to the end (the default) or should be
     prepended if `name` already exists."""
     val = env.get(name, "")
-    if len(val) > 0:
-        val = val.split(separator)
-    else:
-        val = []
+    val = val.split(separator) if len(val) > 0 else []
     if append:
         val.append(item)
     else:
@@ -183,13 +177,15 @@ def path_search(env, exename, defval=None):
 def _perform_path_search(path, exename):
     is_win = sys.platform.startswith("win")
     if is_win:
-        exename = "%s.exe" % exename
+        exename = f"{exename}.exe"
 
     for bindir in path.split(os.pathsep):
         full_name = os.path.join(bindir, exename)
-        if os.path.exists(full_name) and os.path.isfile(full_name):
-            if not is_win and not os.access(full_name, os.X_OK):
-                continue
+        if (
+            os.path.exists(full_name)
+            and os.path.isfile(full_name)
+            and (is_win or os.access(full_name, os.X_OK))
+        ):
             return full_name
 
     return None

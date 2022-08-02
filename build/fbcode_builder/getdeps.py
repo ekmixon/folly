@@ -57,7 +57,7 @@ class ValidateManifest(SubCmd):
             print("OK", file=sys.stderr)
             return 0
         except Exception as exc:
-            print("ERROR: %s" % str(exc), file=sys.stderr)
+            print(f"ERROR: {str(exc)}", file=sys.stderr)
             return 1
 
     def setup_parser(self, parser):
@@ -68,7 +68,7 @@ class ValidateManifest(SubCmd):
 class ShowHostType(SubCmd):
     def run(self, args):
         host = HostType()
-        print("%s" % host.as_tuple_string())
+        print(f"{host.as_tuple_string()}")
         return 0
 
 
@@ -115,10 +115,9 @@ class ProjectCmdBase(SubCmd):
             elif len(parts) == 1:
                 project = args.project
                 path = parts[0]
-            # On Windows path contains colon, e.g. C:\open
             elif os.name == "nt" and len(parts) == 3:
                 project = parts[0]
-                path = parts[1] + ":" + parts[2]
+                path = f"{parts[1]}:{parts[2]}"
             else:
                 raise UsageError(
                     "invalid %s argument; too many ':' characters: %s" % (arg_type, arg)
@@ -244,7 +243,7 @@ class CachedProject(object):
 
     def download(self):
         if self.is_cacheable() and not os.path.exists(self.inst_dir):
-            print("check cache for %s" % self.cache_file_name)
+            print(f"check cache for {self.cache_file_name}")
             dl_dir = os.path.join(self.loader.build_opts.scratch_dir, "downloads")
             if not os.path.exists(dl_dir):
                 os.makedirs(dl_dir)
@@ -252,9 +251,7 @@ class CachedProject(object):
                 target_file_name = os.path.join(dl_dir, self.cache_file_name)
                 if self.cache.download_to_file(self.cache_file_name, target_file_name):
                     tf = tarfile.open(target_file_name, "r")
-                    print(
-                        "Extracting %s -> %s..." % (self.cache_file_name, self.inst_dir)
-                    )
+                    print(f"Extracting {self.cache_file_name} -> {self.inst_dir}...")
                     tf.extractall(self.inst_dir)
 
                     cached_marker = os.path.join(self.inst_dir, ".getdeps-cached-build")
@@ -263,27 +260,29 @@ class CachedProject(object):
 
                     return True
             except Exception as exc:
-                print("%s" % str(exc))
+                print(f"{str(exc)}")
 
         return False
 
     def upload(self):
-        if self.is_cacheable():
-            # We can prepare an archive and stick it in LFS
-            tempdir = tempfile.mkdtemp()
-            tarfilename = os.path.join(tempdir, self.cache_file_name)
-            print("Archiving for cache: %s..." % tarfilename)
-            tf = tarfile.open(tarfilename, "w:gz")
-            tf.add(self.inst_dir, arcname=".")
-            tf.close()
-            try:
-                self.cache.upload_from_file(self.cache_file_name, tarfilename)
-            except Exception as exc:
-                print(
-                    "Failed to upload to cache (%s), continue anyway" % str(exc),
-                    file=sys.stderr,
-                )
-            shutil.rmtree(tempdir)
+        if not self.is_cacheable():
+            return
+        # We can prepare an archive and stick it in LFS
+        tempdir = tempfile.mkdtemp()
+        tarfilename = os.path.join(tempdir, self.cache_file_name)
+        print(f"Archiving for cache: {tarfilename}...")
+        tf = tarfile.open(tarfilename, "w:gz")
+        tf.add(self.inst_dir, arcname=".")
+        tf.close()
+        try:
+            self.cache.upload_from_file(self.cache_file_name, tarfilename)
+        except Exception as exc:
+            print(
+                f"Failed to upload to cache ({str(exc)}), continue anyway",
+                file=sys.stderr,
+            )
+
+        shutil.rmtree(tempdir)
 
 
 @cmd("fetch", "fetch the code for a given project")
@@ -367,19 +366,16 @@ class InstallSysDepsCmd(ProjectCmdBase):
                 merged += v
                 all_packages[k] = merged
 
-        if args.package_type:
-            manager = args.package_type
-        else:
-            manager = loader.build_opts.host_type.get_package_manager()
+        manager = (
+            args.package_type or loader.build_opts.host_type.get_package_manager()
+        )
 
         cmd_args = None
         if manager == "rpm":
-            packages = sorted(list(set(all_packages["rpm"])))
-            if packages:
+            if packages := sorted(list(set(all_packages["rpm"]))):
                 cmd_args = ["dnf", "install", "-y"] + packages
         elif manager == "deb":
-            packages = sorted(list(set(all_packages["deb"])))
-            if packages:
+            if packages := sorted(list(set(all_packages["deb"]))):
                 cmd_args = ["apt", "install", "-y"] + packages
         else:
             host_tuple = loader.build_opts.host_type.as_tuple_string()
@@ -417,7 +413,7 @@ class ListDepsCmd(ProjectCmdBase):
 def clean_dirs(opts):
     for d in ["build", "installed", "extracted", "shipit"]:
         d = os.path.join(opts.scratch_dir, d)
-        print("Cleaning %s..." % d)
+        print(f"Cleaning {d}...")
         if os.path.exists(d):
             shutil.rmtree(d)
 
@@ -498,7 +494,7 @@ class BuildCmd(ProjectCmdBase):
         if args.clean:
             clean_dirs(loader.build_opts)
 
-        print("Building on %s" % loader.ctx_gen.get_context(args.project))
+        print(f"Building on {loader.ctx_gen.get_context(args.project)}")
         projects = loader.manifests_in_dependency_order()
 
         cache = cache_module.create_cache() if args.use_build_cache else None
@@ -528,7 +524,7 @@ class BuildCmd(ProjectCmdBase):
                 or m != manifest
                 and not args.no_deps
             ):
-                print("Assessing %s..." % m.name)
+                print(f"Assessing {m.name}...")
                 project_hash = loader.get_project_hash(m)
                 ctx = loader.ctx_gen.get_context(m.name)
                 built_marker = os.path.join(inst_dir, ".built-by-getdeps")
@@ -579,7 +575,7 @@ class BuildCmd(ProjectCmdBase):
                     if args.schedule_type == "continuous":
                         cached_project.upload()
                 elif args.verbose:
-                    print("found good %s" % built_marker)
+                    print(f"found good {built_marker}")
 
             install_dirs.append(inst_dir)
 
@@ -607,12 +603,11 @@ class BuildCmd(ProjectCmdBase):
                         print(
                             f"Will reconfigure cmake because {dep_file} is newer than {built_marker}"
                         )
-                else:
-                    if not sources_changed:
-                        sources_changed = True
-                        print(
-                            f"Will run build because {dep_file} is newer than {built_marker}"
-                        )
+                elif not sources_changed:
+                    sources_changed = True
+                    print(
+                        f"Will run build because {dep_file} is newer than {built_marker}"
+                    )
 
                 if reconfigure and sources_changed:
                     break
@@ -755,7 +750,7 @@ class TestCmd(ProjectCmdBase):
             if m == manifest or args.test_dependencies:
                 built_marker = os.path.join(inst_dir, ".built-by-getdeps")
                 if not os.path.exists(built_marker):
-                    print("project %s has not been built" % m.name)
+                    print(f"project {m.name} has not been built")
                     # TODO: we could just go ahead and build it here, but I
                     # want to tackle that as part of adding build-for-test
                     # support.
@@ -927,26 +922,18 @@ jobs:
 
             out.write("    - name: Build %s\n" % manifest.name)
 
-            project_prefix = ""
-            if not build_opts.is_windows():
-                project_prefix = (
-                    " --project-install-prefix %s:/usr/local" % manifest.name
-                )
+            project_prefix = (
+                ""
+                if build_opts.is_windows()
+                else f" --project-install-prefix {manifest.name}:/usr/local"
+            )
 
             out.write(
                 f"      run: {getdepscmd} build --src-dir=. {manifest.name} {project_prefix}\n"
             )
 
             out.write("    - name: Copy artifacts\n")
-            if build_opts.is_linux():
-                # Strip debug info from the binaries, but only on linux.
-                # While the `strip` utility is also available on macOS,
-                # attempting to strip there results in an error.
-                # The `strip` utility is not available on Windows.
-                strip = " --strip"
-            else:
-                strip = ""
-
+            strip = " --strip" if build_opts.is_linux() else ""
             out.write(
                 f"      run: {getdepscmd} fixup-dyn-deps{strip} "
                 f"--src-dir=. {manifest.name} _artifacts/{job_name} {project_prefix} "
@@ -1112,13 +1099,13 @@ def main():
         ap.error(str(exc))
         return 1
     except TransientFailure as exc:
-        print("TransientFailure: %s" % str(exc))
+        print(f"TransientFailure: {str(exc)}")
         # This return code is treated as a retryable transient infrastructure
         # error by Facebook's internal CI, rather than eg: a build or code
         # related error that needs to be fixed before progress can be made.
         return 128
     except subprocess.CalledProcessError as exc:
-        print("%s" % str(exc), file=sys.stderr)
+        print(f"{str(exc)}", file=sys.stderr)
         print("!! Failed", file=sys.stderr)
         return 1
 

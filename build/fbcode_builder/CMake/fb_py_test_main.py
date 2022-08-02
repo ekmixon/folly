@@ -349,7 +349,7 @@ class BuckTestResult(unittest._TextTestResult):
 
     def addSkip(self, test, reason):
         super(BuckTestResult, self).addSkip(test, reason)
-        self.setStatus(test, TestStatus.SKIPPED, "Skipped: %s" % (reason,))
+        self.setStatus(test, TestStatus.SKIPPED, f"Skipped: {reason}")
 
     def addExpectedFailure(self, test, err):
         super(BuckTestResult, self).addExpectedFailure(test, err)
@@ -476,7 +476,7 @@ class Loader(object):
                 continue
 
             # Load all modules whose name is <arg>.<something>
-            prefix = arg + "."
+            prefix = f"{arg}."
             for module in self.modules:
                 if module.startswith(prefix):
                     suite = loader.loadTestsFromName(module)
@@ -682,7 +682,6 @@ class MainProgram(object):
                 method_name = getattr(test, "_testMethodName", "")
                 name = _format_test_name(test.__class__, method_name)
                 print(name)
-            return EXIT_CODE_SUCCESS
         else:
             result = self.run_tests(test_suite)
             if self.options.output is not None:
@@ -690,7 +689,8 @@ class MainProgram(object):
                     json.dump(result.getResults(), f, indent=4, sort_keys=True)
             if not result.wasSuccessful():
                 return EXIT_CODE_TEST_FAILURE
-            return EXIT_CODE_SUCCESS
+
+        return EXIT_CODE_SUCCESS
 
     def run_tests(self, test_suite):
         # Install a signal handler to catch Ctrl-C and display the results
@@ -759,11 +759,8 @@ class MainProgram(object):
         if not self.options.collect_coverage:
             return None
 
-        try:
+        with contextlib.suppress(OSError):
             os.remove(self._coverage_ini_path)
-        except OSError:
-            pass  # Better to litter than to fail the test
-
         # Switch back to the original working directory.
         os.chdir(self._original_working_dir)
 
@@ -786,8 +783,7 @@ class MainProgram(object):
                 break
             r = line.split()[0]
             analysis = self.cov.analysis2(r)
-            covString = self.convert_to_diff_cov_str(analysis)
-            if covString:
+            if covString := self.convert_to_diff_cov_str(analysis):
                 result[r] = covString
 
         return result

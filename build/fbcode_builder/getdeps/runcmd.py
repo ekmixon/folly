@@ -107,7 +107,7 @@ def _run_cmd(cmd, env, cwd, allow_fail, log_fn):
             cmd, env=env, cwd=cwd, stdout=stdout, stderr=subprocess.STDOUT
         )
     except (TypeError, ValueError, OSError) as exc:
-        log_fn("error running `%s`: %s" % (cmd_str, exc))
+        log_fn(f"error running `{cmd_str}`: {exc}")
         raise RunCommandError(
             "%s while running `%s` with env=%r\nos.environ=%r"
             % (str(exc), cmd_str, env, os.environ)

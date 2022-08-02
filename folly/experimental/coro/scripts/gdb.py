@@ -125,7 +125,7 @@ def nullptr() -> gdb.Value:
 
 def to_hex(v: gdb.Value) -> str:
     """Returns v in hex padded with leading zeros"""
-    return f"{int(v):#0{18}x}"
+    return f"{int(v):#018x}"
 
 
 def get_file_name_and_line(addr: gdb.Value) -> Tuple[str, int]:
@@ -136,7 +136,7 @@ def get_file_name_and_line(addr: gdb.Value) -> Tuple[str, int]:
         to_string=True,
     ).split("\n")[0]
     groups = regex.match(output)
-    return (groups.group(2).strip('"'), int(groups.group(1))) if groups else ("???", 0)
+    return (groups[2].strip('"'), int(groups[1])) if groups else ("???", 0)
 
 
 def get_func_name(addr: gdb.Value) -> str:
@@ -147,7 +147,7 @@ def get_func_name(addr: gdb.Value) -> str:
         to_string=True,
     ).split("\n")[0]
     groups = regex.match(output)
-    return groups.group(1) if groups else "???"
+    return groups[1] if groups else "???"
 
 
 def get_current_pthread_addr() -> gdb.Value:
@@ -157,7 +157,7 @@ def get_current_pthread_addr() -> gdb.Value:
     regex = re.compile(r"\[Current thread is.*\(Thread (.*) \(LWP .*\)\)")
     output = gdb.execute("thread", from_tty=False, to_string=True).split("\n")[0]
     groups = regex.match(output)
-    return gdb.parse_and_eval(groups.group(1)) if groups else nullptr()
+    return gdb.parse_and_eval(groups[1]) if groups else nullptr()
 
 
 def get_async_stack_root_addr() -> gdb.Value:
@@ -214,7 +214,7 @@ def get_async_stack_root_addr() -> gdb.Value:
 
 
 def print_async_stack_addrs(addrs: List[gdb.Value]) -> None:
-    if len(addrs) == 0:
+    if not addrs:
         print("No async operation detected")
         return
     num_digits = len(str(len(addrs)))
@@ -356,8 +356,7 @@ def get_async_stack_addrs() -> List[gdb.Value]:
     async_stack_root = AsyncStackRoot.from_addr(async_stack_root_addr)
     normal_stack_frame_addr = gdb.parse_and_eval("$rbp")
     normal_stack_frame_stop_addr = async_stack_root.stack_frame_ptr
-    addrs: List[gdb.Value] = []
-    addrs.append(gdb.parse_and_eval("$pc"))
+    addrs: List[gdb.Value] = [gdb.parse_and_eval("$pc")]
     async_stack_frame_addr = async_stack_root.top_frame
 
     while int(normal_stack_frame_addr) != 0 or int(async_stack_frame_addr) != 0:
@@ -375,7 +374,7 @@ def get_async_stack_addrs() -> List[gdb.Value]:
 
 
 def print_async_stack_root_addrs(addrs: List[gdb.Value]) -> None:
-    if len(addrs) == 0:
+    if not addrs:
         print("No async stack roots detected")
         return
     num_digits = len(str(len(addrs)))

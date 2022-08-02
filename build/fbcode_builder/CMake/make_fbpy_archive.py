@@ -25,7 +25,7 @@ class UsageError(Exception):
 
 class BadManifestError(UsageError):
     def __init__(self, path, line_num, message):
-        full_msg = "%s:%s: %s" % (path, line_num, message)
+        full_msg = f"{path}:{line_num}: {message}"
         super().__init__(full_msg)
         self.path = path
         self.line_num = line_num
@@ -38,7 +38,7 @@ PathInfo = collections.namedtuple(
 
 
 def parse_manifest(manifest, path_map):
-    bad_prefix = ".." + os.path.sep
+    bad_prefix = f"..{os.path.sep}"
     manifest_dir = os.path.dirname(manifest)
     with open(manifest, "r") as f:
         line_num = 1
@@ -55,12 +55,12 @@ def parse_manifest(manifest, path_map):
             line = line.rstrip("\n")
             parts = line.split(MANIFEST_SEPARATOR)
             if len(parts) != 2:
-                msg = "line must be of the form SRC %s DEST" % MANIFEST_SEPARATOR
+                msg = f"line must be of the form SRC {MANIFEST_SEPARATOR} DEST"
                 raise BadManifestError(manifest, line_num, msg)
             src, dest = parts
             dest = os.path.normpath(dest)
             if dest.startswith(bad_prefix):
-                msg = "destination path starts with %s: %s" % (bad_prefix, dest)
+                msg = f"destination path starts with {bad_prefix}: {dest}"
                 raise BadManifestError(manifest, line_num, msg)
 
             if not os.path.isabs(src):
@@ -190,7 +190,7 @@ def ensure_directory(path):
 def install_library(args, path_map):
     """Create an installation directory a python library."""
     out_dir = args.output
-    out_manifest = args.output + ".manifest"
+    out_manifest = f"{args.output}.manifest"
 
     install_dir = args.install_dir
     if not install_dir:
@@ -233,10 +233,11 @@ def check_main_module(args, path_map):
         args.main = None
 
     if args.type == "lib-install":
-        if args.main is not None:
-            raise UsageError("cannot specify a --main argument with --type=lib-install")
-        return
+        if args.main is None:
+            return
 
+        else:
+            raise UsageError("cannot specify a --main argument with --type=lib-install")
     main_info = path_map.get("__main__.py")
     if args.main:
         if main_info is not None:
@@ -253,12 +254,11 @@ def check_main_module(args, path_map):
                 "argument to --main must be of the form MODULE:CALLABLE "
                 "(received %s)" % (args.main,)
             )
-    else:
-        if main_info is None:
-            raise UsageError(
-                "no main module specified with --main, "
-                "and no __main__.py module present"
-            )
+    elif main_info is None:
+        raise UsageError(
+            "no main module specified with --main, "
+            "and no __main__.py module present"
+        )
 
 
 BUILD_TYPES = {
@@ -317,7 +317,7 @@ def main():
         path_map = parse_manifests(args)
         check_main_module(args, path_map)
     except UsageError as ex:
-        print("error: %s" % (ex,), file=sys.stderr)
+        print(f"error: {ex}", file=sys.stderr)
         sys.exit(1)
 
     build_fn(args, path_map)

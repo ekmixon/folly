@@ -61,9 +61,7 @@ class ShellQuoted(namedtuple("ShellQuoted", ("do_not_use_raw_str",))):
         """
         return ShellQuoted(
             self.do_not_use_raw_str.format(
-                **dict(
-                    (k, shell_quote(v).do_not_use_raw_str) for k, v in kwargs.items()
-                )
+                **{k: shell_quote(v).do_not_use_raw_str for k, v in kwargs.items()}
             )
         )
 
